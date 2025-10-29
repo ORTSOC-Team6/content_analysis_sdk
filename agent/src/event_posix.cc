@@ -51,14 +51,14 @@ ResultCode ContentAnalysisEventPosix::Send() {
   if (WriteMessage(client_fd_, serialized)) {
     return ResultCode::OK;
   } else {
-    return ResultCode::ERR_CANNOT_SEND_RESPONSE;
+    return ResultCode::ERR_UNEXPECTED;
   }
 }
 
 std::string ContentAnalysisEventPosix::DebugString() const {
   std::stringstream state;
   state << "ContentAnalysisEventPosix{client_fd=" << client_fd_;
-  state << " request_token=" << request()->request_token();
+  state << " request_token=" << GetRequest().request_token();
   state << "}";
   return state.str();
 }

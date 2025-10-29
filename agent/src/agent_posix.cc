@@ -17,6 +17,7 @@
 #include <utility>
 #include <iostream>
 #include <sstream>
+#include <climits>
 
 #include "agent_posix.h"
 #include "event_posix.h"
@@ -184,6 +185,13 @@ ResultCode AgentPosix::Initialize() {
   }
 
   std::cout << "[Agent] Listening for connections (backlog=5)" << std::endl;
+  std::cout << "[Agent] Agent ready - Firefox should connect to: " << socket_path_ << std::endl;
+  
+  // Show socket permissions for debugging
+  std::string ls_cmd = "ls -la " + socket_path_;
+  std::cout << "[Agent] Socket permissions: ";
+  std::cout.flush();
+  system(ls_cmd.c_str());
 
   return ResultCode::OK;
 }
@@ -274,10 +282,32 @@ void AgentPosix::HandleNewConnection() {
   // Keep client socket in BLOCKING mode for easier message handling
   // Don't set O_NONBLOCK flag on client sockets
 
-  // Create browser info for this client
+  // Get actual client process info using SO_PEERCRED
   BrowserInfo browser_info;
-  browser_info.pid = getpid();  // Use our own PID for now
-  browser_info.binary_path = "demo_client";
+  struct ucred cred;
+  socklen_t len = sizeof(cred);
+  
+  if (getsockopt(client_fd, SOL_SOCKET, SO_PEERCRED, &cred, &len) == 0) {
+    browser_info.pid = cred.pid;
+    
+    // Try to get the process executable path
+    std::string proc_path = "/proc/" + std::to_string(cred.pid) + "/exe";
+    char exe_path[PATH_MAX];
+    ssize_t path_len = readlink(proc_path.c_str(), exe_path, sizeof(exe_path) - 1);
+    if (path_len != -1) {
+      exe_path[path_len] = '\0';
+      browser_info.binary_path = exe_path;
+    } else {
+      browser_info.binary_path = "unknown";
+    }
+    
+    std::cout << "Client info: pid=" << browser_info.pid << " path=" << browser_info.binary_path << std::endl;
+  } else {
+    // Fallback if SO_PEERCRED fails
+    std::cerr << "Failed to get client credentials: " << strerror(errno) << std::endl;
+    browser_info.pid = 0;
+    browser_info.binary_path = "unknown";
+  }
 
   clients_[client_fd] = browser_info;
   

@@ -282,6 +282,8 @@ ContentAnalysisAcknowledgement BuildAcknowledgement(
 
 void HandleRequest(const ContentAnalysisRequest& request) {
   AtomicCout aout;
+  aout.stream() << "[Demo] Processing request: " << request.request_token() << std::endl;
+  
   ContentAnalysisResponse response;
   int err = client->Send(request, &response);
   if (err != 0) {
@@ -291,6 +293,7 @@ void HandleRequest(const ContentAnalysisRequest& request) {
     aout.stream() << "[Demo] Response " << request.request_token() << " is missing a result"
                   << std::endl;
   } else {
+    aout.stream() << "[Demo] Received valid response with " << response.results_size() << " results" << std::endl;
     DumpResponse(aout.stream(), response);
 
     auto final_action = ContentAnalysisAcknowledgement::ALLOW;
@@ -321,6 +324,8 @@ void HandleRequest(const ContentAnalysisRequest& request) {
       if (err != 0) {
         aout.stream() << "[Demo] Error sending ack " << request.request_token()
                       << std::endl;
+      } else {
+        aout.stream() << "[Demo] Successfully sent acknowledgement for " << request.request_token() << std::endl;
       }
     }
   }
@@ -338,10 +343,15 @@ void ProcessRequest(size_t i) {
 }
 
 int main(int argc, char* argv[]) {
+  std::cout << "[Demo] Starting client with " << argc << " arguments" << std::endl;
+  
   if (!ParseCommandLine(argc, argv)) {
     PrintHelp();
     return 1;
   }
+
+  std::cout << "[Demo] Using path: " << path << ", user_specific: " << user_specific << std::endl;
+  std::cout << "[Demo] Number of data items to process: " << datas.size() << std::endl;
 
   // Each client uses a unique name to identify itself with Google Chrome.
   client = Client::Create({path, user_specific});

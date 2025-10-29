@@ -89,20 +89,28 @@ ClientPosix::~ClientPosix() {
 
 bool ClientPosix::Connect() {
   if (socket_fd_ != -1) {
+    std::cout << "[Client] Already connected with fd=" << socket_fd_ << std::endl;
     return true;  // Already connected
   }
 
+  std::cout << "[Client] Creating socket..." << std::endl;
   socket_fd_ = socket(AF_UNIX, SOCK_STREAM, 0);
   if (socket_fd_ == -1) {
+    std::cerr << "[Client] Failed to create socket: " << strerror(errno) << std::endl;
     return false;
   }
+
+  std::cout << "[Client] Socket created with fd=" << socket_fd_ << std::endl;
 
   struct sockaddr_un addr;
   memset(&addr, 0, sizeof(addr));
   addr.sun_family = AF_UNIX;
 
   std::string socket_path = GetSocketPath(configuration().name, configuration().user_specific);
+  std::cout << "[Client] Connecting to socket path: " << socket_path << std::endl;
+  
   if (socket_path.size() >= sizeof(addr.sun_path)) {
+    std::cerr << "[Client] Socket path too long: " << socket_path.size() << " >= " << sizeof(addr.sun_path) << std::endl;
     close(socket_fd_);
     socket_fd_ = -1;
     return false;
@@ -111,10 +119,13 @@ bool ClientPosix::Connect() {
   strncpy(addr.sun_path, socket_path.c_str(), sizeof(addr.sun_path) - 1);
 
   if (connect(socket_fd_, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) == -1) {
+    std::cerr << "[Client] Failed to connect to " << socket_path << ": " << strerror(errno) << std::endl;
     close(socket_fd_);
     socket_fd_ = -1;
     return false;
   }
+
+  std::cout << "[Client] Successfully connected to agent" << std::endl;
 
   // Try to get agent info (best effort)
   agent_info().pid = 0;  // TODO: Could implement getting agent PID if needed
@@ -125,6 +136,7 @@ bool ClientPosix::Connect() {
 
 void ClientPosix::Disconnect() {
   if (socket_fd_ != -1) {
+    std::cout << "[Client] Disconnecting from agent (fd=" << socket_fd_ << ")" << std::endl;
     close(socket_fd_);
     socket_fd_ = -1;
   }
@@ -137,41 +149,65 @@ bool ClientPosix::IsConnected() const {
 int ClientPosix::Send(ContentAnalysisRequest request,
                       ContentAnalysisResponse* response) {
   if (!IsConnected()) {
+    std::cerr << "[Client] Cannot send: not connected to agent" << std::endl;
     return -1;
   }
+
+  std::cout << "[Client] Sending request: " << request.request_token() << std::endl;
 
   ChromeToAgent chrome_to_agent;
   *chrome_to_agent.mutable_request() = std::move(request);
 
   std::string serialized = chrome_to_agent.SerializeAsString();
+  std::cout << "[Client] Serialized message size: " << serialized.size() << " bytes" << std::endl;
+  
   if (!WriteMessage(socket_fd_, serialized)) {
+    std::cerr << "[Client] Failed to write message to agent" << std::endl;
     return -1;
   }
+
+  std::cout << "[Client] Message sent, waiting for response..." << std::endl;
 
   std::string response_data;
   if (!ReadMessage(socket_fd_, &response_data)) {
+    std::cerr << "[Client] Failed to read response from agent" << std::endl;
     return -1;
   }
 
+  std::cout << "[Client] Received response size: " << response_data.size() << " bytes" << std::endl;
+
   AgentToChrome agent_to_chrome;
   if (!agent_to_chrome.ParseFromString(response_data)) {
+    std::cerr << "[Client] Failed to parse response from agent" << std::endl;
     return -1;
   }
 
   *response = std::move(*agent_to_chrome.mutable_response());
+  std::cout << "[Client] Successfully processed response for: " << response->request_token() << std::endl;
   return 0;
 }
 
 int ClientPosix::Acknowledge(const ContentAnalysisAcknowledgement& ack) {
   if (!IsConnected()) {
+    std::cerr << "[Client] Cannot acknowledge: not connected to agent" << std::endl;
     return -1;
   }
+
+  std::cout << "[Client] Sending acknowledgement for: " << ack.request_token() << std::endl;
 
   ChromeToAgent chrome_to_agent;
   *chrome_to_agent.mutable_ack() = ack;
 
   std::string serialized = chrome_to_agent.SerializeAsString();
-  return WriteMessage(socket_fd_, serialized) ? 0 : -1;
+  bool success = WriteMessage(socket_fd_, serialized);
+  
+  if (success) {
+    std::cout << "[Client] Acknowledgement sent successfully" << std::endl;
+  } else {
+    std::cerr << "[Client] Failed to send acknowledgement" << std::endl;
+  }
+  
+  return success ? 0 : -1;
 }
 
 int ClientPosix::CancelRequests(const ContentAnalysisCancelRequests& cancel) {

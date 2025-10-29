@@ -34,24 +34,35 @@ std::string GetSocketPath(const std::string& name, bool user_specific) {
   } else {
     path = "/tmp/content_analysis_" + name;
   }
+  std::cout << "[Agent] Using socket path: " << path << std::endl;
   return path;
 }
 
 bool WriteMessage(int socket_fd, const std::string& message) {
   if (message.empty()) {
+    std::cerr << "[Agent] Cannot write empty message" << std::endl;
     return false;
   }
+
+  std::cout << "[Agent] Writing message to fd=" << socket_fd << ", size=" << message.size() << std::endl;
 
   // Write message length first (4 bytes)
   uint32_t length = static_cast<uint32_t>(message.size());
   ssize_t written = write(socket_fd, &length, sizeof(length));
   if (written != sizeof(length)) {
+    std::cerr << "[Agent] Failed to write message length: " << strerror(errno) << std::endl;
     return false;
   }
 
   // Write message data
   written = write(socket_fd, message.data(), message.size());
-  return written == static_cast<ssize_t>(message.size());
+  if (written != static_cast<ssize_t>(message.size())) {
+    std::cerr << "[Agent] Failed to write message data: " << strerror(errno) << std::endl;
+    return false;
+  }
+
+  std::cout << "[Agent] Successfully wrote message" << std::endl;
+  return true;
 }
 
 bool ReadMessage(int socket_fd, std::string* message) {
@@ -59,17 +70,26 @@ bool ReadMessage(int socket_fd, std::string* message) {
   uint32_t length;
   ssize_t bytes_read = read(socket_fd, &length, sizeof(length));
   if (bytes_read != sizeof(length)) {
+    if (bytes_read == 0) {
+      std::cout << "[Agent] Client disconnected (EOF)" << std::endl;
+    } else {
+      std::cerr << "[Agent] Failed to read message length from fd=" << socket_fd << ": " << strerror(errno) << std::endl;
+    }
     return false;
   }
+
+  std::cout << "[Agent] Reading message from fd=" << socket_fd << ", expected size=" << length << std::endl;
 
   // Read message data
   std::vector<char> buffer(length);
   bytes_read = read(socket_fd, buffer.data(), length);
   if (bytes_read != static_cast<ssize_t>(length)) {
+    std::cerr << "[Agent] Failed to read message data: expected " << length << ", got " << bytes_read << std::endl;
     return false;
   }
 
   message->assign(buffer.data(), length);
+  std::cout << "[Agent] Successfully read message" << std::endl;
   return true;
 }
 
@@ -105,14 +125,20 @@ AgentPosix::~AgentPosix() {
 }
 
 ResultCode AgentPosix::Initialize() {
+  std::cout << "[Agent] Initializing POSIX agent..." << std::endl;
+  
   server_socket_ = socket(AF_UNIX, SOCK_STREAM, 0);
   if (server_socket_ == -1) {
+    std::cerr << "[Agent] Failed to create socket: " << strerror(errno) << std::endl;
     return ResultCode::ERR_UNEXPECTED;
   }
+
+  std::cout << "[Agent] Created socket with fd=" << server_socket_ << std::endl;
 
   // Set socket to non-blocking for better event handling
   int flags = fcntl(server_socket_, F_GETFL, 0);
   if (flags == -1 || fcntl(server_socket_, F_SETFL, flags | O_NONBLOCK) == -1) {
+    std::cerr << "[Agent] Failed to set socket non-blocking: " << strerror(errno) << std::endl;
     close(server_socket_);
     server_socket_ = -1;
     return ResultCode::ERR_UNEXPECTED;
@@ -133,18 +159,25 @@ ResultCode AgentPosix::Initialize() {
 
   // Remove existing socket file if it exists
   unlink(socket_path_.c_str());
+  std::cout << "[Agent] Cleaned up any existing socket file" << std::endl;
 
   if (bind(server_socket_, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) == -1) {
+    std::cerr << "[Agent] Failed to bind to " << socket_path_ << ": " << strerror(errno) << std::endl;
     close(server_socket_);
     server_socket_ = -1;
     return ResultCode::ERR_UNEXPECTED;
   }
 
+  std::cout << "[Agent] Successfully bound to " << socket_path_ << std::endl;
+
   if (listen(server_socket_, 5) == -1) {
+    std::cerr << "[Agent] Failed to listen on socket: " << strerror(errno) << std::endl;
     close(server_socket_);
     server_socket_ = -1;
     return ResultCode::ERR_UNEXPECTED;
   }
+
+  std::cout << "[Agent] Listening for connections (backlog=5)" << std::endl;
 
   return ResultCode::OK;
 }

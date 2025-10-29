@@ -15,8 +15,10 @@ namespace testing {
 std::unique_ptr<ContentAnalysisEventPosix> CreateEvent(
     const BrowserInfo& browser_info,
     ContentAnalysisRequest request) {
+  // Use a dummy client_fd for testing
+  int dummy_client_fd = 1;
   return std::make_unique<ContentAnalysisEventPosix>(
-      browser_info, std::move(request));
+      dummy_client_fd, browser_info, std::move(request));
 }
 
 TEST(EventTest, Create_BrowserInfo) {

@@ -314,6 +314,13 @@ bool AgentPosix::HandleClientMessage(int client_fd) {
     auto event = std::make_unique<ContentAnalysisEventPosix>(
         client_fd, browser_info, std::move(*chrome_to_agent.mutable_request()));
     
+    // Initialize the event (this sets up the default response)
+    ResultCode rc = event->Init();
+    if (rc != ResultCode::OK) {
+      std::cerr << "Failed to initialize event: " << static_cast<int>(rc) << std::endl;
+      return false;  // Event initialization failed
+    }
+    
     if (handler()) {
       handler()->OnAnalysisRequested(std::move(event));
     }

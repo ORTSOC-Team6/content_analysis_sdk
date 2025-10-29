@@ -13,12 +13,16 @@
 namespace content_analysis {
 namespace sdk {
 
-// ContentAnalysisEvent implementaton for linux.
+// ContentAnalysisEvent implementation for POSIX.
 class ContentAnalysisEventPosix : public ContentAnalysisEventBase {
  public:
-   ContentAnalysisEventPosix(int client_fd,
-                             const BrowserInfo& browser_info,
-                             ContentAnalysisRequest request);
+  ContentAnalysisEventPosix(int client_fd,
+                           const BrowserInfo& browser_info,
+                           ContentAnalysisRequest request);
+
+  // Initialize the event.  This involves validating the request and
+  // setting up the default response.
+  ResultCode Init();
 
   // ContentAnalysisEvent:
   ResultCode Send() override;

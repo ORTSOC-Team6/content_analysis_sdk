@@ -30,6 +30,7 @@ class AgentPosix : public AgentBase {
   bool SendResponse(int client_fd, const AgentToChrome& response);
 
  private:
+  friend std::unique_ptr<Agent> Agent::Create(Config, std::unique_ptr<AgentEventHandler>, ResultCode*);
   ResultCode Initialize();
   void HandleNewConnection();
   bool HandleClientMessage(int client_fd);

@@ -107,7 +107,7 @@ AgentPosix::~AgentPosix() {
 ResultCode AgentPosix::Initialize() {
   server_socket_ = socket(AF_UNIX, SOCK_STREAM, 0);
   if (server_socket_ == -1) {
-    return ResultCode::ERR_CANNOT_CREATE_CHANNEL;
+    return ResultCode::ERR_UNEXPECTED;
   }
 
   // Set socket to non-blocking for better event handling
@@ -115,7 +115,7 @@ ResultCode AgentPosix::Initialize() {
   if (flags == -1 || fcntl(server_socket_, F_SETFL, flags | O_NONBLOCK) == -1) {
     close(server_socket_);
     server_socket_ = -1;
-    return ResultCode::ERR_CANNOT_CREATE_CHANNEL;
+    return ResultCode::ERR_UNEXPECTED;
   }
 
   struct sockaddr_un addr;
@@ -137,13 +137,13 @@ ResultCode AgentPosix::Initialize() {
   if (bind(server_socket_, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) == -1) {
     close(server_socket_);
     server_socket_ = -1;
-    return ResultCode::ERR_CANNOT_CREATE_CHANNEL;
+    return ResultCode::ERR_UNEXPECTED;
   }
 
   if (listen(server_socket_, 5) == -1) {
     close(server_socket_);
     server_socket_ = -1;
-    return ResultCode::ERR_CANNOT_CREATE_CHANNEL;
+    return ResultCode::ERR_UNEXPECTED;
   }
 
   return ResultCode::OK;
@@ -324,3 +324,6 @@ bool AgentPosix::SendResponse(int client_fd, const AgentToChrome& response) {
   std::string serialized = response.SerializeAsString();
   return WriteMessage(client_fd, serialized);
 }
+
+}  // namespace sdk
+}  // namespace content_analysis

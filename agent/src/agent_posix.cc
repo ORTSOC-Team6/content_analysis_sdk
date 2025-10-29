@@ -80,6 +80,12 @@ bool ReadMessage(int socket_fd, std::string* message) {
 
   std::cout << "[Agent] Reading message from fd=" << socket_fd << ", expected size=" << length << std::endl;
 
+  // Validate message length
+  if (length > 1024 * 1024) {  // 1MB limit
+    std::cerr << "[Agent] Message too large: " << length << " bytes" << std::endl;
+    return false;
+  }
+
   // Read message data
   std::vector<char> buffer(length);
   bytes_read = read(socket_fd, buffer.data(), length);
@@ -265,11 +271,8 @@ void AgentPosix::HandleNewConnection() {
 
   std::cout << "New client connected: fd=" << client_fd << std::endl;
 
-  // Set client socket to non-blocking
-  int flags = fcntl(client_fd, F_GETFL, 0);
-  if (flags != -1) {
-    fcntl(client_fd, F_SETFL, flags | O_NONBLOCK);
-  }
+  // Keep client socket in BLOCKING mode for easier message handling
+  // Don't set O_NONBLOCK flag on client sockets
 
   // Create browser info for this client
   BrowserInfo browser_info;

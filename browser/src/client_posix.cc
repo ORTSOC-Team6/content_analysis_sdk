@@ -57,6 +57,11 @@ bool ReadMessage(int socket_fd, std::string* message) {
     return false;
   }
 
+  // Validate message length
+  if (length > 1024 * 1024) {  // 1MB limit
+    return false;
+  }
+
   // Read message data
   std::vector<char> buffer(length);
   bytes_read = read(socket_fd, buffer.data(), length);

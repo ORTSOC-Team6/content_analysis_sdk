@@ -226,8 +226,11 @@ void AgentPosix::HandleNewConnection() {
                         &client_len);
   
   if (client_fd == -1) {
+    std::cerr << "Accept failed: " << strerror(errno) << std::endl;
     return;  // Accept failed, continue
   }
+
+  std::cout << "New client connected: fd=" << client_fd << std::endl;
 
   // Set client socket to non-blocking
   int flags = fcntl(client_fd, F_GETFL, 0);
@@ -237,8 +240,8 @@ void AgentPosix::HandleNewConnection() {
 
   // Create browser info for this client
   BrowserInfo browser_info;
-  browser_info.pid = 0;  // TODO: Could implement getting client PID if needed
-  browser_info.binary_path = "";
+  browser_info.pid = getpid();  // Use our own PID for now
+  browser_info.binary_path = "demo_client";
 
   clients_[client_fd] = browser_info;
   
@@ -250,16 +253,21 @@ void AgentPosix::HandleNewConnection() {
 bool AgentPosix::HandleClientMessage(int client_fd) {
   std::string message;
   if (!ReadMessage(client_fd, &message)) {
+    std::cout << "Failed to read message from client fd=" << client_fd << std::endl;
     return false;  // Read failed, client should be removed
   }
 
+  std::cout << "Received message from client fd=" << client_fd << ", size=" << message.size() << std::endl;
+
   ChromeToAgent chrome_to_agent;
   if (!chrome_to_agent.ParseFromString(message)) {
+    std::cout << "Failed to parse protobuf message from client fd=" << client_fd << std::endl;
     return false;  // Invalid message format
   }
 
   auto client_it = clients_.find(client_fd);
   if (client_it == clients_.end()) {
+    std::cout << "Client fd=" << client_fd << " not found in client list" << std::endl;
     return false;  // Client not found
   }
 
@@ -289,6 +297,8 @@ bool AgentPosix::HandleClientMessage(int client_fd) {
 }
 
 void AgentPosix::RemoveClient(int client_fd) {
+  std::cout << "Removing client fd=" << client_fd << std::endl;
+  
   auto client_it = clients_.find(client_fd);
   if (client_it != clients_.end()) {
     if (handler()) {

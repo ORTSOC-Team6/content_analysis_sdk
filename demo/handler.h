@@ -76,9 +76,6 @@ class Handler : public content_analysis::sdk::AgentEventHandler {
       aout.stream() << "  Verdict: failed to reach verdict: ";
       aout.stream() << event->DebugString() << std::endl;
     } else if (block) {
-      content_analysis::sdk::UpdateResponse(event->GetResponse(), 
-               "dlp_check",  // tag name
-               ContentAnalysisResponse::Result::SUCCESS);
       auto rc = content_analysis::sdk::SetEventVerdictToBlock(event.get());
       aout.stream() << "  Verdict: block";
       if (rc != content_analysis::sdk::ResultCode::OK) {

@@ -176,6 +176,13 @@ ResultCode AgentPosix::Initialize() {
   }
 
   std::cout << "[Agent] Successfully bound to " << socket_path_ << std::endl;
+  
+  // Set socket permissions to allow Firefox to connect
+  if (chmod(socket_path_.c_str(), 0666) == -1) {
+    std::cerr << "[Agent] Warning: Failed to set socket permissions: " << strerror(errno) << std::endl;
+  } else {
+    std::cout << "[Agent] Set socket permissions to 0666" << std::endl;
+  }
 
   if (listen(server_socket_, 5) == -1) {
     std::cerr << "[Agent] Failed to listen on socket: " << strerror(errno) << std::endl;
@@ -199,6 +206,8 @@ ResultCode AgentPosix::Initialize() {
 ResultCode AgentPosix::HandleEvents() {
   std::vector<struct pollfd> poll_fds;
   
+  std::cout << "[Agent] Starting event loop - waiting for connections..." << std::endl;
+  
   while (!stop_requested_) {
     // Prepare poll file descriptors
     poll_fds.clear();
@@ -211,22 +220,31 @@ ResultCode AgentPosix::HandleEvents() {
       poll_fds.push_back({client.first, POLLIN, 0});
     }
 
+    std::cout << "[Agent] Polling on " << poll_fds.size() << " file descriptors (1 server + " 
+              << clients_.size() << " clients)" << std::endl;
+
     // Poll with timeout
     int result = poll(poll_fds.data(), poll_fds.size(), 1000);  // 1 second timeout
     
     if (result == -1) {
       if (errno == EINTR) {
+        std::cout << "[Agent] Poll interrupted by signal, continuing..." << std::endl;
         continue;  // Interrupted by signal, continue
       }
+      std::cerr << "[Agent] Poll failed: " << strerror(errno) << std::endl;
       return ResultCode::ERR_UNEXPECTED;
     }
     
     if (result == 0) {
+      std::cout << "[Agent] Poll timeout (no events)" << std::endl;
       continue;  // Timeout, check stop condition
     }
 
+    std::cout << "[Agent] Poll returned " << result << " events" << std::endl;
+
     // Handle server socket events (new connections)
     if (poll_fds[0].revents & POLLIN) {
+      std::cout << "[Agent] New connection detected on server socket" << std::endl;
       HandleNewConnection();
     }
 
@@ -234,18 +252,26 @@ ResultCode AgentPosix::HandleEvents() {
     for (size_t i = 1; i < poll_fds.size(); ++i) {
       if (poll_fds[i].revents & (POLLIN | POLLHUP | POLLERR)) {
         int client_fd = poll_fds[i].fd;
+        std::cout << "[Agent] Event on client fd=" << client_fd;
+        
         if (poll_fds[i].revents & POLLIN) {
+          std::cout << " (data available)" << std::endl;
           if (!HandleClientMessage(client_fd)) {
+            std::cout << "[Agent] Client message handling failed, removing client" << std::endl;
             RemoveClient(client_fd);
           }
-        } else {
-          // Client disconnected or error
+        } else if (poll_fds[i].revents & POLLHUP) {
+          std::cout << " (client disconnected)" << std::endl;
+          RemoveClient(client_fd);
+        } else if (poll_fds[i].revents & POLLERR) {
+          std::cout << " (error)" << std::endl;
           RemoveClient(client_fd);
         }
       }
     }
   }
 
+  std::cout << "[Agent] Event loop stopped" << std::endl;
   return ResultCode::OK;
 }
 

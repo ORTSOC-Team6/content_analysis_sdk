@@ -25,11 +25,11 @@ class AgentPosix : public AgentBase {
   ResultCode HandleEvents() override;
   ResultCode Stop() override;
   std::string DebugString() const override;
-
+  
+  private:
   // Send response back to client
   bool SendResponse(int client_fd, const AgentToChrome& response);
 
- private:
   friend std::unique_ptr<Agent> Agent::Create(Config, std::unique_ptr<AgentEventHandler>, ResultCode*);
   ResultCode Initialize();
   void HandleNewConnection();
